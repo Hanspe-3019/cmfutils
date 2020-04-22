@@ -2,9 +2,9 @@
     Interne Generatoren für das Parsen der Ausgabe von DFH$MOLS
     neu strukturiert, Ermittelung der APPLID kommt aus
 '''
+import timeit
 import pandas as pd
 import numpy as np
-import timeit
 
 
 def gen_splits(recs):
@@ -13,7 +13,7 @@ def gen_splits(recs):
       Split der Zeile in einzelene Woerter
       yield: list aus applid und split()
     """
-    cnt_data  = 0
+    cnt_data = 0
     cnt_rest = 0
     for rec in recs:
         if len(rec) > 60 and rec[:4] == ' '*4:
@@ -27,7 +27,9 @@ def gen_splits(recs):
 def gen_keyvalpairs(listen):
     '''extrahiert aus Zeile Key (Name) und Value (Formatierter Inhalt)
     '''
-    XFIELDS = 'IVASORIG IVASSERV TTYPE TRANFLAG OTRANFLG'.split()
+    hexafields = frozenset(
+        'IVASORIG IVASSERV TTYPE TRANFLAG OTRANFLG'.split()
+    )
 
     def packed(hexa_packed):
         '''Zahl aus Character-Darstellung (letzte Spalte) extrahieren
@@ -49,17 +51,18 @@ def gen_keyvalpairs(listen):
         # 00000000 041A587E 00 000009
         return int(stck[18:], 16)
 
-    val = {"A": # counter
-                lambda liste: int(liste[4]),
-           "S": # Clock Time
-               lambda liste: stck_to_sec(liste[3]),
-           "C": # Character
-               lambda liste: liste[-1],
-           "X": # 4 oder 8 Bytes in Hexadarstellung
-               lambda liste: liste[3],
-           "T": # Time Stamp Date, Time
-               lambda liste: pd.to_datetime(' '.join(liste[-2:])),
-           "P": packed # Packed Decimal
+    val = {
+        "A": # counter
+            lambda liste: int(liste[4]),
+        "S": # Clock Time
+            lambda liste: stck_to_sec(liste[3]),
+        "C": # Character
+            lambda liste: liste[-1],
+        "X": # 4 oder 8 Bytes in Hexadarstellung
+            lambda liste: liste[3],
+        "T": # Time Stamp Date, Time
+            lambda liste: pd.to_datetime(' '.join(liste[-2:])),
+        "P": packed # Packed Decimal
     }
 
     i = 0
@@ -76,7 +79,7 @@ def gen_keyvalpairs(listen):
         if len(feld) != 4:
             continue  # C001, ...
         feldtyp, feldnum = feld[0], feld[1:]
-        if nick in XFIELDS:
+        if nick in hexafields:
             feldtyp = 'X'
 
         if feldtyp in val:
@@ -99,13 +102,13 @@ def gen_dicts(fields):
     # usw.
 
     # Falls fields leer ist oder kein TRAN vorhanden:
-    feld, inhalt =  None, None
+    feld, inhalt = None, None
 
     for feld, inhalt in fields:
         if feld == "TRAN":
             break
     else:   # fields ist leer oder kein TRAN vorhanden
-        raise StopIteration
+        return
 
     task = {}
     task[feld] = inhalt
