@@ -17,26 +17,21 @@ def load(pattern):
     fields = g.gen_keyvalpairs(tuples)  # Formatiere Tuple
 
     t_start = timer()
-    cmfrecs = list(g.gen_dicts(fields))
-    delta = timer() - t_start
-    print(
-        f"{len(cmfrecs)} CMF Records"
-        f"in {delta:3.2f} Sekunden"
-        f"({delta/len(cmfrecs)*1000:3.1f} ms)"
-    )
-    t_start = timer()
     #
     # DataFrame kann auch direkt aus einem Generator erzeugt werden
-    # dann brauchen die list cmfrecs nicht mehr, sollte Speicher sparen!
     #
-    dframe = pd.DataFrame(cmfrecs)
+    dframe = pd.DataFrame(g.gen_dicts(fields))
     delta = timer() - t_start
+    print(
+        f"{len(dframe)} CMF records "
+        f"in {delta:3.2f} seconds,"
+        f"({delta/len(dframe)*1000:3.1f} ms)"
+    )
 
     # Erzeuge weitere Spalte RESP für die Responsetime in Sekunden
     t_start = timer()
     dframe['RESP'] = (dframe['STOP']-dframe['START']).apply(
         pd.Timedelta.total_seconds)
     delta_2 = timer() - t_start
-    print(f"Konvertiert in DataFrame in {delta:3.2f} Sekunden")
     print(f"Berechnet RESP in {delta_2:3.2f} Sekunden")
     return dframe
