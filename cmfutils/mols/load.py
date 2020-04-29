@@ -11,9 +11,17 @@ def load(pattern):
     '''
 
     pathes = io.gen_pathes(pattern)      #
-    dfhmols = io.gen_cat(pathes)         # Verkette die Eingaben
+#   dfhmols = io.gen_cat(pathes)         # Verkette die Eingaben
 
-    tuples = (g.gen_splits(dfhmols))    # Erzeuge aus Zeile ein Tuple
+#   tuples = (g.gen_splits(dfhmols))    # Erzeuge aus Zeile ein Tuple
+    #
+    #  4 Elemente Fieldname (xxxxxxxx, tnnn), Nicknam eund Content
+    #
+    tuples = (
+        rec.split(max_split=3)
+        for rec in io.gen_cat(pathes)
+        if len(rec) > 60 and rec[:4] == ' '*4
+    )
     fields = g.gen_keyvalpairs(tuples)  # Formatiere Tuple
 
     t_start = timer()

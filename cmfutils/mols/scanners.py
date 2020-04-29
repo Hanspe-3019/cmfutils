@@ -2,12 +2,11 @@
     Interne Generatoren für das Parsen der Ausgabe von DFH$MOLS
     neu strukturiert, Ermittelung der APPLID kommt aus
 '''
-import timeit
 import pandas as pd
 import numpy as np
 
 
-def gen_splits(recs):
+def genold_splits(recs):
     """ Hier kommt die Ausgabe von DFH$MOLS rein
       Mindestlaenge ist 60
       Split der Zeile in einzelene Woerter
@@ -31,50 +30,24 @@ def gen_keyvalpairs(listen):
         'IVASORIG IVASSERV TTYPE TRANFLAG OTRANFLG'.split()
     )
 
-    def packed(hexa_packed):
-        '''Zahl aus Character-Darstellung (letzte Spalte) extrahieren
-        '''
-        try:
-            return int(hexa_packed[-1])
-        except ValueError:
-            pass
-        return np.nan
-    def stck_to_sec(stck):
-        ''' Umwandlung STCK in Sekunden
-        '''
-        # 0000 0000 041A 587E 0000 0009
-        return int(stck[:13], 16) / 1E6
-    def stck_to_cnt(stck):
-        ''' Umwandlung STCK in count
-        '''
-        # 01234567 89012345 67 890123
-        # 00000000 041A587E 00 000009
-        return int(stck[18:], 16)
-
     val = {
-        "A": # counter
-            lambda liste: int(liste[4]),
-        "S": # Clock Time
-            lambda liste: stck_to_sec(liste[3]),
-        "C": # Character
-            lambda liste: liste[-1],
-        "X": # 4 oder 8 Bytes in Hexadarstellung
-            lambda liste: liste[3],
-        "T": # Time Stamp Date, Time
-            lambda liste: pd.to_datetime(' '.join(liste[-2:])),
-        "P": packed # Packed Decimal
+        "A": get_counter,
+        "S": get_clocktime,
+        "C": get_character,
+        "X": get_hexa,
+        "T": get_timestamp,
+        "P": get_packed,
     }
 
     i = 0
     j = 0
     for liste in listen:
-        if len(liste) < 4:
+        if len(liste) != 4:
             continue
         if len(liste[0]) > 8:
             continue  # DFHTASK, ...
 
-        feld = liste[1]
-        nick = liste[2]
+        feld, nick, content = liste[1:]
 
         if len(feld) != 4:
             continue  # C001, ...
@@ -87,10 +60,10 @@ def gen_keyvalpairs(listen):
                            '117'):    # dämliche CDSA below
                 nick = nick + '24'
             i = i + 1
-            yield (nick, val[feldtyp](liste))
+            yield (nick, val[feldtyp](content))
             if feldtyp == 'S':
                 j = j + 1
-                yield (nick + '_CT', stck_to_cnt(liste[3]))
+                yield (nick + '_CT', stck_to_cnt(content))
     print("pair: {:} / {:}".format(i, j))
 
 def gen_dicts(fields):
@@ -118,3 +91,49 @@ def gen_dicts(fields):
             task = {}
         task[feld] = inhalt
     yield task            # letzte Gruppe nicht vergessen!
+
+def get_counter(content):
+    '''  interpreted 4 oder 8 Bytes
+    '''
+    return int(content.split()[-1])
+def get_clocktime(content):
+    ''' Umwandlung STCK in Sekunden
+      ' 00000000008AFEA800000011    000 00:00:00.002223  17'
+    '''
+    stck = content.split()[0]
+    return int(stck[:13], 16) / 1E6
+def get_character(content):
+    '''
+      ' E2E8F3E2 D6C3D2D7                              SY3SOCKP'
+    '''
+    return content.split()[-1]
+def get_hexa(content):
+    '''
+    4 oder 8 Bytes in Hexadarstellung
+      ' 8000800004000000'
+    '''
+    return content.split()[0]
+def get_timestamp(content):
+    '''
+    Time Stamp Date, Time
+      'D467BDCF5C83D018                 2018/05/30 14:34:59.255357'
+    '''
+    interpreted = content.split()[-2:]
+    return pd.to_datetime(' '.join(interpreted))
+def get_packed(content):
+    '''
+    Zahl aus Hexa-Darstellung extrahieren
+      '0054580C                              54580'
+    '''
+    hexa_packed = content.split()[0]
+    try:
+        return int(hexa_packed[-1])
+    except ValueError:
+        pass
+    return np.nan
+def stck_to_cnt(content):
+    ''' Umwandlung STCK in count
+      ' 00000000008AFEA800000011    000 00:00:00.002223  17'
+    '''
+    cnt = content.split()[-1]
+    return int(cnt)
