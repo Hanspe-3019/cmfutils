@@ -16,14 +16,11 @@ def gen_pathes(generic_path):
 def gen_cat(pathlist):
     '''Generator: cat mit rstrip und decode utf-8
     '''
-    i = 0
     for the_path in pathlist:
         print(f"Reading {the_path}")
         with open(the_path, encoding='ascii', errors='ignore') as opened:
-            for i, rec in enumerate(opened):
+            for rec in enumerate(opened):
                 yield rec.rstrip() # ohne Whitespace newline am Ende
-        print(f"Records: {i}")
-
 
 def genold_cat(pathlist):
     '''Generator: cat mit rstrip und decode utf-8

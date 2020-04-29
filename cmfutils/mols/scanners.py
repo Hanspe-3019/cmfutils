@@ -5,25 +5,7 @@
 import pandas as pd
 import numpy as np
 
-
-def genold_splits(recs):
-    """ Hier kommt die Ausgabe von DFH$MOLS rein
-      Mindestlaenge ist 60
-      Split der Zeile in einzelene Woerter
-      yield: list aus applid und split()
-    """
-    cnt_data = 0
-    cnt_rest = 0
-    for rec in recs:
-        if len(rec) > 60 and rec[:4] == ' '*4:
-            cnt_data = cnt_data + 1
-            yield rec.split(None, 8)
-        else:
-            cnt_rest = cnt_rest + 1
-
-    print("splt: {:} / {:}".format(cnt_data, cnt_rest))
-
-def gen_keyvalpairs(listen):
+def gen_keyvalpairs(fields):
     '''extrahiert aus Zeile Key (Name) und Value (Formatierter Inhalt)
     '''
     hexafields = frozenset(
@@ -39,34 +21,32 @@ def gen_keyvalpairs(listen):
         "P": get_packed,
     }
 
-    i = 0
-    j = 0
-    for liste in listen:
-        if len(liste) != 4:
+    for ftuple in fields:
+        if len(ftuple) != 4:
             continue
-        if len(liste[0]) > 8:
+        if len(ftuple[0]) > 8:
             continue  # DFHTASK, ...
 
-        feld, nick, content = liste[1:]
+        field, nick, content = ftuple[1:]
 
-        if len(feld) != 4:
+        if len(field) != 4:
             continue  # C001, ...
-        feldtyp, feldnum = feld[0], feld[1:]
+        fieldtype, fieldnum = field[0], field[1:]
         if nick in hexafields:
-            feldtyp = 'X'
+            fieldtype = 'X'
 
-        if feldtyp in val:
-            if feldnum in ('095', '033', '054',     # dämliche UDSA below
-                           '117'):    # dämliche CDSA below
-                nick = nick + '24'
-            i = i + 1
-            yield (nick, val[feldtyp](content))
-            if feldtyp == 'S':
-                j = j + 1
-                yield (nick + '_CT', stck_to_cnt(content))
-    print("pair: {:} / {:}".format(i, j))
+        if fieldtype not in val:
+            continue
 
-def gen_dicts(fields):
+        if fieldnum in ('095', '033', '054',     # dämliche UDSA below
+                        '117'):                  # dämliche CDSA below
+            nick += '24'
+
+        yield (nick, val[fieldtype](content))
+        if fieldtype == 'S':
+            yield (nick + '_CT', stck_to_cnt(content))
+
+def gen_dicts(nicks):
     '''Fasse die Felder zu einer Task in ein Dictionary zusammen
     '''
     # Gruppenwechsel ist schwierig: Gruppe startet mit TRAN-Zeile
@@ -74,22 +54,22 @@ def gen_dicts(fields):
     # Dann weiterlesen bis zur naechsten TRAN-Zeile und dict ausliefern
     # usw.
 
-    # Falls fields leer ist oder kein TRAN vorhanden:
-    feld, inhalt = None, None
+    # Falls nicks leer ist oder kein TRAN vorhanden:
+    nick, nick_value = None, None
 
-    for feld, inhalt in fields:
-        if feld == "TRAN":
+    for nick, nick_value in nicks:
+        if nick == "TRAN":
             break
-    else:   # fields ist leer oder kein TRAN vorhanden
+    else:   # nicks ist leer oder kein TRAN vorhanden
         return
 
     task = {}
-    task[feld] = inhalt
-    for feld, inhalt in fields:
-        if feld == "TRAN":
+    task[nick] = nick_value
+    for nick, nick_value in nicks:
+        if nick == "TRAN":
             yield task
             task = {}
-        task[feld] = inhalt
+        task[nick] = nick_value
     yield task            # letzte Gruppe nicht vergessen!
 
 def get_counter(content):
@@ -127,7 +107,7 @@ def get_packed(content):
     '''
     hexa_packed = content.split()[0]
     try:
-        return int(hexa_packed[-1])
+        return int(hexa_packed[:-1])
     except ValueError:
         pass
     return np.nan

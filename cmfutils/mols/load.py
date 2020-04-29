@@ -11,14 +11,11 @@ def load(pattern):
     '''
 
     pathes = io.gen_pathes(pattern)      #
-#   dfhmols = io.gen_cat(pathes)         # Verkette die Eingaben
-
-#   tuples = (g.gen_splits(dfhmols))    # Erzeuge aus Zeile ein Tuple
     #
-    #  4 Elemente Fieldname (xxxxxxxx, tnnn), Nicknam eund Content
+    #  4 parts Field (xxxxxxxx, tnnn), Nicknam and Content
     #
     tuples = (
-        rec.split(max_split=3)
+        rec.split(maxsplit=3)
         for rec in io.gen_cat(pathes)
         if len(rec) > 60 and rec[:4] == ' '*4
     )
@@ -41,5 +38,5 @@ def load(pattern):
     dframe['RESP'] = (dframe['STOP']-dframe['START']).apply(
         pd.Timedelta.total_seconds)
     delta_2 = timer() - t_start
-    print(f"Berechnet RESP in {delta_2:3.2f} Sekunden")
+    print(f"Added RESP in {delta_2:3.2f} Seconds.")
     return dframe
