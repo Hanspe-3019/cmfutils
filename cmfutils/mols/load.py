@@ -27,16 +27,18 @@ def load(pattern):
     #
     dframe = pd.DataFrame(g.gen_dicts(fields))
     delta = timer() - t_start
+    len_dframe = len(dframe) if len(dframe) > 0 else 1
     print(
         f"{len(dframe)} CMF records "
         f"in {delta:3.2f} seconds,"
-        f"({delta/len(dframe)*1000:3.1f} ms)"
+        f"({delta/len_dframe*1000:3.1f} ms)"
     )
 
     # Erzeuge weitere Spalte RESP für die Responsetime in Sekunden
-    t_start = timer()
-    dframe['RESP'] = (dframe['STOP']-dframe['START']).apply(
-        pd.Timedelta.total_seconds)
-    delta_2 = timer() - t_start
-    print(f"Added RESP in {delta_2:3.2f} Seconds.")
+    if len(dframe) > 0:
+        t_start = timer()
+        dframe['RESP'] = (dframe['STOP']-dframe['START']).apply(
+            pd.Timedelta.total_seconds)
+        delta_2 = timer() - t_start
+        print(f"Added RESP in {delta_2:3.2f} Seconds.")
     return dframe

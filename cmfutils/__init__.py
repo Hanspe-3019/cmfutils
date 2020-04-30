@@ -1,6 +1,7 @@
 ''' Directly imports some frequently used functions
 '''
 from .mols.load import load
+from .mols.tocategory import mig_coltypes_to_categories
 from .cmfhelper2 import df_info
 from .cmfhelper2 import describe
 from .cmfhelper2 import timestamp_from_baid

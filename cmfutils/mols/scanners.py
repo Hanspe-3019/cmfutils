@@ -99,7 +99,7 @@ def get_timestamp(content):
       'D467BDCF5C83D018                 2018/05/30 14:34:59.255357'
     '''
     interpreted = content.split()[-2:]
-    return pd.to_datetime(' '.join(interpreted))
+    return pd.Timestamp(' '.join(interpreted))
 def get_packed(content):
     '''
     Zahl aus Hexa-Darstellung extrahieren
