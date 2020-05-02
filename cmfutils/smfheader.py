@@ -1,30 +1,62 @@
 ''' Analyze DFH$MOLS Output file
 '''
+from enum import Enum
 from functools import wraps
-from collections import defaultdict
+from collections import Counter
 from collections import namedtuple
+class Where(Enum):
+    ''' Beschreibt die aktuelle Satzart
+    '''
+    PROLOG = 1
+    SMFHEAD = 2
+    PRODSECT = 3
+    TASKDATA = 4
+    EPILOG = 9
+
+class Result(
+        namedtuple(
+            '_Result',
+            'rectypes '
+            'smfrecs '
+            'smfprods '
+            'mols_prolog '
+            'mols_epilog ',
+            defaults=(
+                Counter(), [], [], [], [],
+            )
+        )
+):
+    ''' Ergebnis als Named Tuple
+    '''
+    def __repr__(self):
+        return (
+            f'Result: {len(self.smfrecs)} Records, '
+            f'{self.rectypes["TRANREC"]} transactions.'
+        )
+    def total(self):
+        ''' Print Total Report from DFH$MOLS
+        '''
+        for line in self.mols_epilog:
+            print(line[5:])
+
+    def selection(self):
+        ''' Print Selection Criteria of DFH$MOLS run.
+        '''
+        for line in self.mols_prolog:
+            print(line[:60])
 
 def analyze_molsoutput(path):
-    ''' Anaylyze structure of Outputfile
+    ''' Analyze structure of Outputfile
     '''
     state = namedtuple(
         'State',
-        'molsheader_footer'
-        'smfrec_header'
-        'product_section'
+        'proc '             # current staged coroutine
+        'where '            # current Where in file
+        'smfheaderdata '    # current smfheader data
+        'prodsectdata '     # current product section data
     )
-    result = namedtuple(
-        'Result',
-        'rectypes'
-        'header_infos'
-        'mols_header_footer'
-    )
-    result.rectypes = defaultdict(int)
-    result.header_infos = []
-    result.mols_header_or_footer = []
-    state.molsheader_or_footer = True
-    state.smfrec_header = False
-    state.product_section = False
+    state.where = Where.PROLOG
+    result = Result()
 
     with open(path, errors='ignore') as molsfile:
         for line in molsfile:
@@ -38,57 +70,51 @@ def process_line(line, state, result):
     '''
     if len(line) < 10:
         result.rectypes['SHORT'] += 1
-        state.product_section = False
 
-#   if line.startswith(b'12345678901234...'):
     elif line.startswith(' '*14 + '...'):
         result.rectypes['...LINE'] += 1
 
     elif line.startswith('1*********'):
         #  Begin new SMF Record
         result.rectypes['SMFREC'] += 1
-        state.molsheader_or_footer = False
-        state.smfrec_header = True
-        smfheader = {}
-        proc = fill_header_info(smfheader)
-        breakpoint()
+        state.where = Where.SMFHEAD
+        state.smfheader = {}
+        state.proc = fill_header_info(state.smfheader)
 
-    elif state.molsheader_or_footer:
-        result.mols_header_or_footer.append(line[1:])
+    elif state.where == Where.PROLOG:
+        result.mols_prolog.append(line[1:])
+
+    elif state.where == Where.EPILOG:
+        result.mols_epilog.append(line[1:])
 
     elif line.startswith(' -----'):
         # Begin Task Data
         result.rectypes['TRANREC'] += 1
-        state.molsheader_or_footer = False
-        state.smfrec_header = False
-        state.product_section = False
 
-    elif state.smfrec_header:
-        breakpoint()
+    elif state.where == Where.SMFHEAD:
         if line.startswith(' **********************'):
             # Ende SMF-Header, Start Product Section
-            result.header_infos.append(smfheader)
+            result.smfrecs.append(state.smfheader)
             result.rectypes['PRODSECTION'] += 1
-            state.smfrec_header = False
-            state.product_section = True
-            prodsect = {}
-            proc = fill_product_section(prodsect)
+            state.where = Where.PRODSECT
+            state.prodsect = {}
+            state.proc = fill_product_section(state.prodsect)
         else:
-            proc.send(line)
+            state.proc.send(line)
 
-    elif state.product_section:
+    elif state.where == Where.PRODSECT:
         if line.startswith(' **********************'):
             # Ende Product Section
-            state.product_section = False
-            result.product_section.append(prodsect)
+            state.where = Where.TASKDATA
+            result.smfprods.append(state.prodsect)
         else:
-            proc.send(line)
+            state.proc.send(line)
 
     elif line.startswith(' '):
         result.rectypes['DATA'] += 1
 
     elif line.startswith('1***  DFH$MOLS'):
-        state.molsheader_or_footer = True
+        state.where = Where.EPILOG
 
 def coroutine(func):
     """Decorator: primes `func` by advancing to first `yield`"""
@@ -98,6 +124,21 @@ def coroutine(func):
         next(gen)
         return gen
     return primer
+
+def word_behind(line, behind):
+    ''' Helper: Wort nach behind-String
+        None, wenn nicht gefunden
+    '''
+    try:
+        after_behind = line.split(behind, maxsplit=1)[1].strip()
+    except IndexError:
+        return None
+
+    try:
+        after_word = after_behind.split(' ')[0]
+    except IndexError:
+        return after_behind
+    return after_word
 
 @coroutine
 def fill_header_info(info):
@@ -112,19 +153,16 @@ def fill_header_info(info):
     *  DATA SECT OFFSET = 158    DATA SECT LENGTH = 32030
                        NUM OF DATA SECTS = 1                                *
     '''
+    first_line = (yield)
+    if val := word_behind(first_line, 'TIME ='):
+        info['TIME'] = val
+    if val := word_behind(first_line, 'DATE ='):
+        info['DATE'] = val
+    if val := word_behind(first_line, 'SYSTEM-ID ='):
+        info['LPAR'] = val
+
     while True:
-        line = (yield)
-        tsplit = line.split('TIME = ')
-        breakpoint()
-        if len(tsplit) == 2:
-            tsplit = tsplit[1].strip().split(' ', maxsplit=1)
-            info['TIME'] = tsplit[0]
-            tsplit = tsplit[1].split('DATE = ', maxsplit=1)
-            tsplit = tsplit[1].strip().split(' ', maxsplit=1)
-            info['DATE'] = tsplit[0]
-            tsplit = tsplit[1].split('SYSTEM-ID = ', maxsplit=1)
-            tsplit = tsplit[1].strip().split(' ', maxsplit=1)
-            info['LPAR'] = tsplit[0]
+        _ = (yield)
 
 @coroutine
 def fill_product_section(info):
@@ -145,12 +183,13 @@ def fill_product_section(info):
     '''
     while True:
         line = (yield)
-        tsplit = line.split('JOB NAME = ')
-        if len(tsplit) == 2:
-            tsplit = tsplit[1].split(' ', maxsplit=1)
-            info['JOBNAME'] = tsplit[0]
-            return
-        tsplit = line.split('COMPRESSED DATA LENGTH = ')
-        if len(tsplit) == 2:
-            tsplit = tsplit[1].split(' ', maxsplit=1)
-            info['COMPLEN'] = int(tsplit[0])
+        if val := word_behind(line, 'JOB NAME = '):
+            info['JOBNAME'] = val
+        if val := word_behind(line, 'DATA CLASS = '):
+            info['CLASS'] = int(val)
+        if val := word_behind(line, ' ROW LENGTH  = '):
+            info['ROWLEN'] = int(val)
+        if val := word_behind(line, 'DATA ROWS  = '):
+            info['ROWS'] = int(val)
+        if val := word_behind(line, 'COMPRESSED DATA LENGTH = '):
+            info['COMPLEN'] = int(val)
