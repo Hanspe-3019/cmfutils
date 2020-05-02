@@ -4,7 +4,10 @@ from setuptools import setup
 
 setup(
     name='cmfutils',
-    version='0.2',
+    version='0.3',
     packages=['cmfutils'],
-    install_requires=['pandas']
+    python_requires='>=3.8',
+    install_requires=[
+        'pandas >= 1.0',
+        ],
 )
